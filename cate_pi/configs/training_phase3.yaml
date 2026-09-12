@@ -1,0 +1,77 @@
+# CATE-π training Phase 3: CoT fine-tuning
+# Freeze action expert. LoRA-adapt language decoder on failure/diagnosis data.
+
+phase: 3
+name: "cot_finetune"
+description: >
+  Fine-tune the CoT reasoning head on a small failure-diagnosis dataset.
+  Freeze the action expert to protect the control skill from Phase 2.
+  Mix in general instruction-following data to guard against catastrophic
+  forgetting of language ability (explicit in Tactile-VLA's recipe).
+
+model:
+  checkpoint: "phase2_best"
+
+  freeze:
+    - "vision_encoder"
+    - "tactile_encoder"
+    - "contact_gate"
+    - "action_expert"
+
+  lora:
+    enabled: true
+    modules:
+      - "vlm_backbone"  # language decoder portion
+    rank: 16
+    alpha: 32
+
+  trainable:
+    - "cot_head"  # raw buffer + summary token projections
+
+training:
+  task: "cot_reasoning"
+  loss: "cross_entropy"  # standard autoregressive language loss
+
+  optimizer:
+    type: "adamw"
+    lr: 1.0e-5
+    weight_decay: 0.01
+    betas: [0.9, 0.95]
+
+  scheduler:
+    type: "cosine"
+    warmup_steps: 200
+    total_steps: 5000
+
+  batch_size: 8
+  gradient_accumulation: 4
+  gradient_clip: 1.0
+  mixed_precision: "bf16"
+
+  # Data mixing (§4.7 — critical for preventing catastrophic forgetting)
+  data:
+    failure_diagnosis_dir: "data/cot_failures/"
+    general_instruction_dir: "data/general_instructions/"
+    # Mix ratio: 70% failure-diagnosis, 30% general instruction-following
+    failure_ratio: 0.7
+    general_ratio: 0.3
+
+  # CoT trigger config
+  cot_trigger:
+    # Fixed-interval trigger (paper baseline)
+    fixed_interval: 5  # every N action chunks
+    # Event trigger (extension — fires on unexpected contact loss)
+    event_trigger:
+      enabled: true
+      contact_loss_window: 3  # frames of unexpected non-contact
+
+  logging:
+    log_every: 50
+    eval_every: 500
+    # Monitor reasoning quality
+    track_reasoning_coherence: true
+
+  checkpointing:
+    save_every: 1000
+    save_best: true
+    metric: "reasoning_accuracy"

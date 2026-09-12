@@ -1,0 +1,56 @@
+# CATE-π training Phase 1: Tactile/Gate warm-up
+# Freeze VLM backbone + action expert. Train only tactile encoder + contact gate.
+
+phase: 1
+name: "gate_warmup"
+description: >
+  Train only the tactile encoder and contact detector/gate on an auxiliary
+  contact-classification task. Predicts c_t from X_t, supervised by
+  calibrated heuristic labels. Validates tactile pipeline and simulator
+  signal quality before entangling with joint optimization.
+
+model:
+  checkpoint: "phase0_verified"  # from Phase 0
+
+  freeze:
+    - "vision_encoder"
+    - "vlm_backbone"
+    - "action_expert"
+
+  trainable:
+    - "tactile_encoder"
+    - "contact_gate"
+
+training:
+  task: "contact_classification"
+  loss: "bce"
+  optimizer:
+    type: "adamw"
+    lr: 1.0e-3
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+
+  scheduler:
+    type: "cosine"
+    warmup_steps: 500
+    total_steps: 10000
+
+  batch_size: 64
+  gradient_clip: 1.0
+
+  # Data: balanced contact/no-contact frames
+  data:
+    contact_ratio: 0.5  # balance contact vs no-contact
+    augmentation:
+      noise_std: 0.01  # small tactile noise augmentation
+
+  logging:
+    log_every: 50
+    eval_every: 500
+    # Track gate value distribution (§12 failure mode)
+    track_gate_distribution: true
+
+  checkpointing:
+    save_every: 1000
+    save_best: true
+    metric: "contact_f1"

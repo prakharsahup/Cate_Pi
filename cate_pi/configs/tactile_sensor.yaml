@@ -1,0 +1,54 @@
+# CATE-π tactile sensor and gating configuration
+
+tactile_sensor:
+  # Sensor spatial layout (TacVLA-style: 15×8 per contact site)
+  rows: 15
+  cols: 8
+  num_taxels: 120  # rows × cols per contact site
+  num_contact_sites: 1  # 1 for parallel gripper, N for multi-finger
+  sensor_rate_hz: 100
+  control_rate_hz: 15  # downsampled to control frequency
+
+tactile_encoder:
+  # Spatio-temporal encoder (§4.3)
+  temporal_window: 4  # K: number of past timesteps to look at
+  per_taxel_embed_dim: 64
+  mlp_hidden_dim: 128
+  # Temporal aggregation
+  temporal_conv_channels: 64
+  temporal_conv_kernel: 3
+  use_gru: false  # alternative: use GRU instead of 1D conv
+  gru_hidden_dim: 64
+  # Output tokens
+  num_tactile_tokens: 36  # TacVLA's reference count
+  token_dim: 2048  # project to backbone hidden_dim
+  # Positional encoding
+  use_sincos_2d_pos: true  # 2D sin-cos positional embedding
+  # Summary token
+  use_summary_token: true  # mean-pool digest token
+
+contact_gate:
+  # Hard gate (paper-faithful, §4.4)
+  hard:
+    pressure_threshold: 0.05  # p_thresh (calibrate from data)
+    count_threshold: 5         # n_thresh (min taxels above pressure thresh)
+
+  # Soft gate (learnable extension, §4.4)
+  soft:
+    mlp_hidden_dim: 64
+    mlp_layers: 2
+    # Auxiliary BCE loss weight for contact classification
+    bce_loss_weight: 0.1
+
+  # Which gate to use (toggle for ablations)
+  mode: "soft"  # "hard" or "soft"
+
+  # Double gating: apply both attention mask AND embedding zeroing
+  double_gate: true
+
+# CoT raw tactile buffer (§4.7)
+cot_buffer:
+  window_size: 50  # ~3-4 seconds of steps
+  features_per_step: 3  # (contact_flag, mean_force, peak_shear)
+  num_summary_tokens: 10  # 1D-pooled summary tokens for CoT
+  summary_token_dim: 2048

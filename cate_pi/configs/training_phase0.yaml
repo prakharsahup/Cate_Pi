@@ -1,0 +1,22 @@
+# CATE-π training Phase 0: Backbone initialization
+# Load pretrained π0/π0.5 checkpoint, freeze everything, verify forward pass
+
+phase: 0
+name: "backbone_init"
+description: >
+  Load a pretrained π0 checkpoint from LeRobot Hub.
+  Freeze everything. Verify forward pass reproduces checkpoint behavior
+  on a known eval task. This is the regression baseline.
+
+model:
+  checkpoint: "lerobot/pi0_base"
+  freeze_all: true
+
+validation:
+  # Run a known eval to verify checkpoint loads correctly
+  eval_task: "libero_spatial"
+  expected_success_rate_min: 0.7  # sanity check threshold
+
+# No training in this phase — pure verification
+training:
+  enabled: false

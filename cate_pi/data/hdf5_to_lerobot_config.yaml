@@ -1,0 +1,23 @@
+data_root:  datasets/
+hdf5_name:  catephi_augmented.hdf5
+output_dir: datasets/catephi_lerobot/
+
+# Standard field mappings
+state_name_sim:    robot_joint_pos
+action_name_sim:   processed_actions
+pov_cam_name_sim:  rgb_wrist
+
+# NEW — CATE-π tactile fields (not in vanilla Isaac Lab converter)
+extra_fields:
+  - source:      obs/tactile_ff       # (T, 20, 25, 3) per episode
+    target:      observation.tactile_ff
+    dtype:       float32
+  - source:      obs/contact_flag     # (T,) binary
+    target:      observation.contact_flag
+    dtype:       float32
+
+# Language instruction (per-episode, from force adverb labeller)
+language_instruction_key: language_instruction
+
+fps:         50
+chunk_size:  1000

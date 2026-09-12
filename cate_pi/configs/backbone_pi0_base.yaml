@@ -1,0 +1,95 @@
+# CATE-π backbone configuration
+# Based on π0 (PaliGemma = SigLIP + Gemma) architecture
+
+backbone:
+  name: "paligemma"
+  # Pretrained checkpoint to load (π0 base from LeRobot Hub)
+  pretrained_checkpoint: "lerobot/pi0_base"
+
+  # SigLIP vision encoder (frozen during fine-tuning)
+  vision:
+    model_name: "siglip-so400m-patch14-384"
+    image_size: 224
+    patch_size: 14
+    tokens_per_image: 256  # (224/14)^2
+    num_cameras: 2  # front + wrist
+    total_vision_tokens: 512  # 256 * 2
+    hidden_dim: 1152  # SigLIP-SO400M hidden size
+
+  # Gemma language model / VLM decoder
+  gemma:
+    hidden_dim: 2048
+    num_layers: 18
+    num_heads: 8
+    head_dim: 256
+    intermediate_dim: 16384
+    vocab_size: 256000
+    max_position_embeddings: 8192
+
+  # LoRA configuration (for compute-efficient fine-tuning, per §4.5)
+  lora:
+    enabled: true
+    rank: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - "q_proj"
+      - "v_proj"
+      - "k_proj"
+      - "o_proj"
+
+# Action Expert (Tactile-Aware, smaller-width transformer, §4.6)
+action_expert:
+  hidden_dim: 512      # narrower than backbone per π0 design
+  num_layers: 8
+  num_heads: 8
+  head_dim: 64
+  intermediate_dim: 2048
+  # Action chunk horizon
+  chunk_horizon: 50    # π0 default H=50
+  # Flow matching
+  flow_matching:
+    num_euler_steps: 10
+    beta_dist_alpha: 1.5
+    beta_dist_beta: 1.0
+    noise_schedule: "linear"
+
+# Action space dimensions (§6)
+action_space:
+  # Parallel-jaw gripper (default)
+  gripper:
+    position_dim: 3       # Δx, Δy, Δz
+    orientation_dim: 6    # 6D rotation representation
+    gripper_dim: 1        # gripper width
+    force_ext_normal_dim: 1   # target external contact normal force (EE → environment)
+    force_ext_shear_dim: 2    # target external shear force (x, y)
+    force_grasp_dim: 1        # target internal grasp force (fingers → object)
+    total_dim: 14
+    padded_dim: 32        # pad to fixed max for embodiment-agnostic ckpts
+
+  # Multi-finger dexterous hand (alternate config)
+  dexterous:
+    wrist_dim: 7          # 6D pose + 1
+    finger_joints: 16     # e.g. Allegro hand
+    contact_sites: 5      # fingertips
+    force_normal_dim: 5   # per-contact-site
+    force_shear_dim: 10   # 2 per contact site
+    total_dim: 38
+    padded_dim: 48
+
+# Prefix token ordering (§5)
+prefix_token_order:
+  - "vision"
+  - "language"
+  - "state"
+  - "tactile"
+
+# Language
+language:
+  max_token_length: 128  # raised from π0's 48 for CoT re-injection
+  tokenizer: "paligemma"  # reuse PaliGemma's SentencePiece
+
+# Proprioceptive state
+state:
+  encoding: "continuous"  # single linear-projected token (not discrete)
+  projection_dim: 2048    # project to backbone hidden_dim

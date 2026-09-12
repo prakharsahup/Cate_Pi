@@ -1,0 +1,85 @@
+# CATE-π training Phase 2: End-to-end CFM fine-tuning
+# Unfreeze tactile encoder, gate, action expert. LoRA-adapt VLM backbone.
+
+phase: 2
+name: "cfm_finetune"
+description: >
+  Full conditional flow matching training with augmented [position, force]
+  action space. This phase gives Tactile-VLA's core capability:
+  force-grounded, tactile-conditioned action generation.
+
+model:
+  checkpoint: "phase1_best"
+
+  freeze: []  # nothing fully frozen
+
+  lora:
+    enabled: true
+    modules:
+      - "vlm_backbone"
+    rank: 16
+    alpha: 32
+
+  trainable:
+    - "tactile_encoder"
+    - "contact_gate"
+    - "action_expert"
+
+training:
+  task: "cfm_action_prediction"
+
+  loss:
+    primary: "cfm"  # Conditional Flow Matching (§4.6)
+    auxiliary:
+      contact_bce:
+        weight: 0.1
+        enabled: true  # soft gate supervision
+
+  optimizer:
+    type: "adamw"
+    lr: 2.5e-5  # lower LR for LoRA fine-tuning
+    weight_decay: 0.01
+    betas: [0.9, 0.95]
+
+  scheduler:
+    type: "cosine"
+    warmup_steps: 1000
+    total_steps: 100000
+
+  batch_size: 16
+  gradient_accumulation: 4  # effective batch = 64
+  gradient_clip: 1.0
+  mixed_precision: "bf16"
+
+  # Flow matching specifics
+  flow_matching:
+    tau_distribution: "beta"
+    beta_alpha: 1.5
+    beta_beta: 1.0
+    euler_steps_train: 10
+
+  # Action normalization (§4.6 — CRITICAL)
+  action_normalization:
+    method: "quantile"
+    target_range: [-1.0, 1.0]
+    # Per-channel to prevent force channels being ignored
+    per_channel: true
+
+  data:
+    demonstrations_dir: "data/demonstrations/"
+    augmentation:
+      tactile_noise_std: 0.005
+      camera_jitter: true
+      force_perturbation: 0.02
+
+  logging:
+    log_every: 100
+    eval_every: 2000
+    # Monitor per-channel loss contribution (§12 failure mode)
+    track_per_channel_loss: true
+    track_gate_distribution: true
+
+  checkpointing:
+    save_every: 5000
+    save_best: true
+    metric: "eval_success_rate"
